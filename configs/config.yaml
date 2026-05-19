@@ -1,0 +1,37 @@
+app:
+  title: "多模态医疗辅助问诊"
+  version: "0.1.0"
+  upload_dir: "tmp/uploads"
+  max_image_size_mb: 10
+
+llm:
+  text_provider: "ollama"       # ollama | api
+  vision_provider: "api"        # ollama | api
+  text_model: "qwen2.5:7b"
+  vision_model: "qwen-vl-plus"
+  ollama_base_url: "http://localhost:11434"
+  api_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  api_key: "sk-5e402afe2acb4edfa4c9c86ebc0bf01e"
+  timeout: 60
+  max_tokens: 1024
+
+rag:
+  collection_name: "medical_knowledge"
+  persist_dir: "vector_store/chroma"
+  top_k: 5
+  chunk_size: 200
+  chunk_overlap: 80
+  embedding_model: "BAAI/bge-small-zh-v1.5"
+
+rules:
+  emergency_rules_path: "data/emergency_rules.json"
+  department_mapping_path: "data/department_mapping.json"
+  safety_keywords:
+    - "确诊为"
+    - "你得了"
+    - "一定是"
+    - "处方药剂量"
+
+logging:
+  level: "INFO"
+  file: "logs/app.log"
