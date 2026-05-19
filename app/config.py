@@ -31,7 +31,7 @@ def _interpolate_dict(d):
 
 
 class AppConfig(BaseModel):
-    title: str = "多模态医疗辅助问诊 Demo"
+    title: str = "多模态医疗辅助问诊"
     version: str = "0.1.0"
     upload_dir: str = "tmp/uploads"
     max_image_size_mb: int = 10
