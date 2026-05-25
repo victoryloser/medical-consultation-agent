@@ -1,0 +1,21 @@
+.env
+vector_store/
+tmp/
+logs/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+# 模型权重（体积过大）
+models/
+output/
+# Claude 内部文件
+.claude/
+# 评估报告（自动生成）
+eval/report.html
+eval/__pycache__/

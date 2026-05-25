@@ -2,11 +2,17 @@ import json
 import re
 from typing import Any
 
-from app.agents.prompts import ADVICE_GENERATE_PROMPT, RISK_ASSESS_PROMPT, SYMPTOM_EXTRACT_PROMPT
+from app.agents.prompts import (
+    ADVICE_GENERATE_PROMPT,
+    EMERGENCY_CONFIRM_PROMPT,
+    RISK_ASSESS_PROMPT,
+    SYMPTOM_EXTRACT_PROMPT,
+)
 from app.agents.state import ConsultationState
 from app.clients import get_text_client, get_vision_client
 from app.config import get_config
 from app.rag.retriever import get_retriever
+from app.rules.emergency_embedding import get_emergency_embedding_retriever
 from app.rules.emergency_rules import get_emergency_engine
 from app.rules.safety_rules import get_safety_filter
 
@@ -56,10 +62,44 @@ def symptom_extract_node(state: ConsultationState) -> dict:
 
 def emergency_check_node(state: ConsultationState) -> dict:
     all_text = (state.get("user_text") or "") + " " + " ".join(state.get("symptoms") or [])
+
+    # 链路一：关键词规则引擎（高精度，O(n) 低延迟）
     engine = get_emergency_engine()
     is_emergency, reason, risk = engine.check(all_text)
     if is_emergency:
         return {"emergency_flag": True, "emergency_reason": reason, "risk_level": risk}
+
+    # 链路二：Embedding 语义相似度
+    emb_retriever = get_emergency_embedding_retriever()
+    hit, category, emb_risk, score = emb_retriever.check(all_text)
+
+    if not hit:
+        return {"emergency_flag": False, "emergency_reason": None}
+
+    cfg = get_config()
+    high_threshold = cfg.rules.emergency_embedding_high_threshold
+
+    # 高置信区间：直接判定
+    if score >= high_threshold:
+        reason = f"语义匹配到高风险场景「{category}」（相似度 {score:.2f}）"
+        return {"emergency_flag": True, "emergency_reason": reason, "risk_level": emb_risk}
+
+    # 灰色地带：LLM 二次确认，避免误报
+    client = get_text_client(cfg)
+    try:
+        prompt = EMERGENCY_CONFIRM_PROMPT.format(
+            text=state.get("user_text", ""),
+            category=category,
+        )
+        raw = client.chat([{"role": "user", "content": prompt}], temperature=0.0)
+        confirmed = raw.strip().lower().startswith("yes")
+    except Exception:
+        confirmed = False
+
+    if confirmed:
+        reason = f"语义匹配到高风险场景「{category}」（相似度 {score:.2f}，LLM 确认）"
+        return {"emergency_flag": True, "emergency_reason": reason, "risk_level": emb_risk}
+
     return {"emergency_flag": False, "emergency_reason": None}
 
 

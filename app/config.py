@@ -60,6 +60,9 @@ class RAGConfig(BaseModel):
 
 class RulesConfig(BaseModel):
     emergency_rules_path: str = "data/emergency_rules.json"
+    emergency_cases_path: str = "data/emergency_cases.json"
+    emergency_embedding_threshold: float = 0.75
+    emergency_embedding_high_threshold: float = 0.88
     department_mapping_path: str = "data/department_mapping.json"
     safety_keywords: list[str] = []
 

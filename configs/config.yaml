@@ -25,6 +25,9 @@ rag:
 
 rules:
   emergency_rules_path: "data/emergency_rules.json"
+  emergency_cases_path: "data/emergency_cases.json"
+  emergency_embedding_threshold: 0.75
+  emergency_embedding_high_threshold: 0.88
   department_mapping_path: "data/department_mapping.json"
   safety_keywords:
     - "确诊为"

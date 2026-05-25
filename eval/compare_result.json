@@ -1,0 +1,20 @@
+{
+  "baseline": {
+    "label": "Baseline (qwen2.5:7b)",
+    "n": 29,
+    "risk_strict": 0.7241379310344828,
+    "risk_loose": 0.9655172413793104,
+    "emg_precision": 0.9090909090909091,
+    "emg_recall": 1.0,
+    "emg_f1": 0.9523809523809523
+  },
+  "finetuned": {
+    "label": "Fine-tuned (SFT+GRPO+DPO)",
+    "n": 29,
+    "risk_strict": 0.6896551724137931,
+    "risk_loose": 1.0,
+    "emg_precision": 0.9090909090909091,
+    "emg_recall": 1.0,
+    "emg_f1": 0.9523809523809523
+  }
+}

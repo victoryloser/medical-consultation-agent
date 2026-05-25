@@ -1,0 +1,12 @@
+# 训练依赖（与项目主环境隔离，建议新建 conda env）
+# conda create -n medical_train python=3.11
+# conda activate medical_train
+
+torch>=2.2.0
+transformers>=4.45.0
+datasets>=2.20.0
+peft>=0.12.0
+trl>=0.12.0
+bitsandbytes>=0.43.0
+accelerate>=0.30.0
+sentencepiece>=0.2.0
