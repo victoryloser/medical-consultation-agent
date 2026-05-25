@@ -16,6 +16,7 @@ models/
 output/
 # Claude 内部文件
 .claude/
+CLAUDE.md
 # 评估报告（自动生成）
 eval/report.html
 eval/__pycache__/
