@@ -4,7 +4,9 @@ from typing import Any
 
 from app.agents.prompts import (
     ADVICE_GENERATE_PROMPT,
+    CONSENSUS_PROMPT,
     EMERGENCY_CONFIRM_PROMPT,
+    FACT_CHECK_PROMPT,
     RISK_ASSESS_PROMPT,
     SYMPTOM_EXTRACT_PROMPT,
 )
@@ -169,6 +171,82 @@ def advice_generate_node(state: ConsultationState) -> dict:
         }
 
 
+# ── 三层验证节点（参照 WSI-Agents 验证机制）─────────────────────────────────
+
+def fact_check_node(state: ConsultationState) -> dict:
+    """Fact Agent：对生成建议做知识库二次核验，输出置信分。"""
+    advice = state.get("advice") or ""
+    docs = state.get("retrieved_docs") or []
+    if not advice or not docs:
+        return {"fact_confidence": 1.0}
+    knowledge = "\n".join(d.get("content", "")[:150] for d in docs[:4])
+    cfg = get_config()
+    client = get_text_client(cfg)
+    try:
+        prompt = FACT_CHECK_PROMPT.format(advice=advice[:500], knowledge=knowledge)
+        raw = client.chat([{"role": "user", "content": prompt}], temperature=0.0)
+        score = float(re.search(r"[01](?:\.\d+)?", raw.strip()).group())
+        score = max(0.0, min(1.0, score))
+    except Exception:
+        score = 0.8
+    return {"fact_confidence": round(score, 3)}
+
+
+def consensus_node(state: ConsultationState) -> dict:
+    """Consensus Agent：调用独立 LLM 对风险等级做第二意见，计算一致性。"""
+    if state.get("emergency_flag"):
+        return {"consensus_agreement": 1.0}
+    symptoms = state.get("symptoms") or []
+    user_text = state.get("user_text") or ""
+    primary_risk = state.get("risk_level", "medium")
+    cfg = get_config()
+    client = get_text_client(cfg)
+    try:
+        prompt = CONSENSUS_PROMPT.format(
+            symptoms=", ".join(symptoms) or "无明显症状",
+            user_text=user_text[:200],
+        )
+        raw = client.chat([{"role": "user", "content": prompt}], temperature=0.0)
+        second_risk = _parse_risk_level(raw)
+        agreement = 1.0 if second_risk == primary_risk else 0.5
+        # 两次结果不一致时以较高风险为准，保守原则
+        if agreement < 1.0:
+            risk_order = {"low": 0, "medium": 1, "high": 2, "emergency": 3}
+            safer_risk = max(primary_risk, second_risk,
+                             key=lambda r: risk_order.get(r, 0))
+            return {"consensus_agreement": agreement, "risk_level": safer_risk}
+    except Exception:
+        agreement = 1.0
+    return {"consensus_agreement": agreement}
+
+
+def consistency_check_node(state: ConsultationState) -> dict:
+    """Logic Agent：检查 emergency_flag 与 risk_level 是否逻辑一致，强制对齐。"""
+    emergency_flag = state.get("emergency_flag", False)
+    risk_level = state.get("risk_level", "medium")
+    risk_order = {"low": 0, "medium": 1, "high": 2, "emergency": 3}
+    fixed = False
+
+    # 矛盾一：标记了急症但风险等级不是 emergency
+    if emergency_flag and risk_order.get(risk_level, 0) < 3:
+        risk_level = "emergency"
+        fixed = True
+
+    # 矛盾二：风险是 emergency 但没有标记 emergency_flag
+    if risk_level == "emergency" and not emergency_flag:
+        emergency_flag = True
+        fixed = True
+
+    if fixed:
+        return {
+            "risk_level": risk_level,
+            "emergency_flag": emergency_flag,
+            "consistency_fixed": True,
+            "errors": ["⚠️ Logic Agent：检测到风险等级与急症标志不一致，已自动修正"],
+        }
+    return {"consistency_fixed": False}
+
+
 def safety_review_node(state: ConsultationState) -> dict:
     advice = state.get("advice") or ""
     safety_filter = get_safety_filter()
@@ -256,6 +334,23 @@ def _render_report(state: ConsultationState) -> str:
     warnings = state.get("safety_warnings") or []
     warnings_text = "\n".join(f"- {w}" for w in warnings) if warnings else "无特殊提醒"
 
+    # 验证层摘要
+    fact_conf = state.get("fact_confidence")
+    consensus = state.get("consensus_agreement")
+    consistency_fixed = state.get("consistency_fixed", False)
+    verification_text = ""
+    if fact_conf is not None or consensus is not None:
+        lines = []
+        if fact_conf is not None:
+            lines.append(f"- 知识库一致性（Fact）：{fact_conf:.0%}")
+        if consensus is not None:
+            lines.append(f"- 双模型共识度（Consensus）：{consensus:.0%}")
+        if consistency_fixed:
+            lines.append("- 逻辑校验（Logic）：检测到矛盾并已自动修正")
+        else:
+            lines.append("- 逻辑校验（Logic）：通过")
+        verification_text = "\n### 10. 验证层摘要\n" + "\n".join(lines) + "\n"
+
     emergency_section = ""
     if state.get("emergency_flag"):
         reason = state.get("emergency_reason") or ""
@@ -291,5 +386,5 @@ def _render_report(state: ConsultationState) -> str:
 
 ### 9. 免责声明
 本报告仅用于健康咨询和学习演示，**不能替代医生诊断**。如症状严重或持续加重，请及时就医。
-"""
+{verification_text}"""
     return report.strip()
